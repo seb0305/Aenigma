@@ -1,59 +1,68 @@
 import os
 from dotenv import load_dotenv
-import frag_caesar_bs4
 
 from flask import Flask, send_from_directory, jsonify
 from flask_cors import CORS
 from extensions import db
-from flask_login import LoginManager, current_user, AnonymousUserMixin
+from flask_login import LoginManager, AnonymousUserMixin
 from werkzeug.security import generate_password_hash
 from models import User
 from openai import OpenAI
+import io
+import csv
 
 load_dotenv()
+
+# Lazy imports for fast startup
+frag_caesar_client = None
+
+
+def get_frag_caesar():
+    """Lazy import frag_caesar_bs4 - avoids startup timeout."""
+    global frag_caesar_client
+    if frag_caesar_client is None:
+        import frag_caesar_bs4
+        frag_caesar_client = frag_caesar_bs4
+    return frag_caesar_client
 
 
 def create_app():
     """
     Factory function to create and configure the Flask application.
-
-    Initializes Flask app with database, blueprints, authentication,
-    CORS, and demo user. Returns fully configured app instance.
+    Optimized for Render/Neon: Fast startup, lazy imports, conditional DB init.
     """
-    # Import blueprints after load_dotenv to ensure env vars available
+    # Import blueprints after load_dotenv
     from routes.vocab import vocab_bp
     from routes.quiz import quiz_bp
     from routes.cards import cards_bp
     from routes.auth import auth_bp
 
     app = Flask(__name__)
-    db_url = os.getenv('DATABASE_URL')
-    if db_url.startswith('postgres://'):
-        db_url = db_url.replace('postgres://', 'postgresql://')
 
-    # Configuration from environment variables
-    app.config["SECRET_KEY"] = os.getenv("SECRET_KEY")
+    # Neon Postgres / SQLite
+    db_url = os.getenv('DATABASE_URL')
+    if db_url and db_url.startswith('postgres://'):
+        db_url = db_url.replace('postgres://', 'postgresql://')
     app.config["SQLALCHEMY_DATABASE_URI"] = db_url or "sqlite:///latin_vocab.db"
     app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+    app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", "fallback-secret-key")
 
-    # AI configuration for quizzes and features
+    # AI config (safe init)
+    api_key = os.getenv("OPENAI_API_KEY")
+    app.config['client'] = OpenAI(api_key=api_key) if api_key else None
     app.config['OPENAI_MODEL'] = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
-    app.config['GEMINI_MODEL'] = os.getenv("GEMINI_MODEL", "gemini-2.5-flash-lite")
 
-    # Global OpenAI client (used by quiz blueprint)
-    app.config['client'] = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-
-    # Register API blueprints for modular routing
+    # Register blueprints
     app.register_blueprint(auth_bp, url_prefix='/api/auth')
     app.register_blueprint(vocab_bp, url_prefix='/api/vocab')
     app.register_blueprint(quiz_bp, url_prefix='/api/quiz')
     app.register_blueprint(cards_bp, url_prefix='/api/cards')
 
-    # Initialize extensions
+    # Extensions
     db.init_app(app)
     CORS(app)
 
-    # Flask-Login configuration for user authentication
+    # Flask-Login
     login_manager = LoginManager()
     login_manager.init_app(app)
     login_manager.anonymous_user = AnonymousUserMixin
@@ -62,16 +71,18 @@ def create_app():
     def load_user(user_id):
         return User.query.get(int(user_id))
 
-    # Create database tables and demo user
+    # FAST STARTUP: Skip heavy init on Render
     with app.app_context():
-        db.create_all()
+        # Only create tables locally (Render: auto-create)
+        if not os.getenv('DATABASE_URL'):
+            db.create_all()
         _create_demo_user_if_missing()
 
     return app
 
 
 def _create_demo_user_if_missing():
-    """Create demo user 'demo'/'demo' if not exists for testing."""
+    """Create demo user 'demo'/'demo' if not exists."""
     demo_user = User.query.filter_by(username='demo').first()
     if not demo_user:
         demo_user = User(
@@ -80,35 +91,42 @@ def _create_demo_user_if_missing():
         )
         db.session.add(demo_user)
         db.session.commit()
-        print("✅ Demo user created: username='demo', password='demo'")
+        print("✅ Demo user created")
 
 
-# Create and configure app
+# Create app
 app = create_app()
 
 
 @app.route("/")
 def index():
-    """Serve static index.html for frontend."""
+    """Serve frontend."""
     return send_from_directory("static", "index.html")
 
 
 @app.route('/api/kurzuebersicht/<word>')
 def api_kurzuebersicht(word):
-    """
-    API endpoint for Latin word lookup using FragCaesar crawler.
+    """Frag-Caesar Kurzübersicht → JSON (lazy import)."""
+    try:
+        client = get_frag_caesar()
+        raw_tsv = client.get_kurzuebersicht(word)
 
-    Fetches morphological data (declensions, conjugations) from frag-caesar.de
-    and returns structured JSON response.
+        if not raw_tsv or raw_tsv.strip() == '':
+            return jsonify([])
 
-    Args:
-        word (str): Latin word to lookup (e.g., 'nox')
+        # TSV → JSON (skip header)
+        reader = csv.DictReader(io.StringIO(raw_tsv), delimiter='\t')
+        data = [row for row in reader]
 
-    Returns:
-        JSON: List of dicts with latin, type, Geschlecht, flexion_type, form, german
-    """
-    data = frag_caesar_bs4.get_kurzuebersicht(word)
-    return jsonify(data)
+        # Add 'latin' if missing
+        for row in data:
+            if not row.get('Latein'):
+                row['Latein'] = word
+
+        return jsonify(data)
+    except Exception as e:
+        print(f"Kurzübersicht error: {e}")
+        return jsonify([])
 
 
 if __name__ == "__main__":
