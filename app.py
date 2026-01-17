@@ -80,14 +80,14 @@ def create_app():
 
     # FAST STARTUP: Skip heavy init on Render
     with app.app_context():
-        # Local only: Full DB init
+        # Always create tables safely (idempotent)
+        db.create_all()
+
+        # Local demo only
         if not os.getenv('DATABASE_URL'):
-            db.create_all()
             _create_demo_user_if_missing()
         else:
-            print("🛡️ Production: Skip DB init (Neon auto-creates)")
-
-    print("✅ App created - DB init skipped")
+            print("🛡️ Production: Tables created, Neon handles data")
     return app
 
 
