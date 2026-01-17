@@ -3,10 +3,10 @@ services:
     name: aenigma
     env: python
     buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn app:app --bind 0.0.0.0:$PORT --workers=1 --threads=4 --timeout=120 --preload
+    startCommand: gunicorn app:app --bind 0.0.0.0:$PORT --workers=1 --threads=4 --timeout=120 --preload --env RENDER=true
     envVars:
       - key: PYTHON_VERSION
         value: 3.12.7
       - fromDatabase:
           name: aenigma-db
-          property: connectionString  # ← Neon auto-link!
+          property: connectionString

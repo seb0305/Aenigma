@@ -7,9 +7,12 @@ from extensions import db
 from flask_login import LoginManager, AnonymousUserMixin
 from werkzeug.security import generate_password_hash
 from models import User
-from openai import OpenAI
 import io
 import csv
+import logging
+
+logging.basicConfig(level=logging.INFO)
+print("🚀 Aenigma starting...")
 
 load_dotenv()
 
@@ -48,9 +51,13 @@ def create_app():
     app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", "fallback-secret-key")
 
     # AI config (safe init)
-    api_key = os.getenv("OPENAI_API_KEY")
-    app.config['client'] = OpenAI(api_key=api_key) if api_key else None
-    app.config['OPENAI_MODEL'] = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+    try:
+        from openai import OpenAI
+        api_key = os.getenv("OPENAI_API_KEY")
+        app.config['client'] = OpenAI(api_key=api_key) if api_key else None
+    except Exception as e:
+        print(f"OpenAI init skipped: {e}")
+        app.config['client'] = None
 
     # Register blueprints
     app.register_blueprint(auth_bp, url_prefix='/api/auth')
@@ -73,22 +80,26 @@ def create_app():
 
     # FAST STARTUP: Skip heavy init on Render
     with app.app_context():
-        # Only create tables locally (Render: auto-create)
+        # Local only: Full DB init
         if not os.getenv('DATABASE_URL'):
             db.create_all()
-        _create_demo_user_if_missing()
+            _create_demo_user_if_missing()
+        else:
+            print("🛡️ Production: Skip DB init (Neon auto-creates)")
 
+    print("✅ App created - DB init skipped")
     return app
 
 
 def _create_demo_user_if_missing():
-    """Create demo user 'demo'/'demo' if not exists."""
+    """Create demo user only LOCAL (skip Render/Neon)."""
+    if os.getenv('DATABASE_URL') or os.getenv('RENDER') == 'true':
+        print("🛡️ Production: Skip demo user")
+        return
+
     demo_user = User.query.filter_by(username='demo').first()
     if not demo_user:
-        demo_user = User(
-            username='demo',
-            password_hash=generate_password_hash('demo')
-        )
+        demo_user = User(username='demo', password_hash=generate_password_hash('demo'))
         db.session.add(demo_user)
         db.session.commit()
         print("✅ Demo user created")
