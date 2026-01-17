@@ -7,3 +7,6 @@ gunicorn==22.0.0
 python-dotenv==1.0.1
 Werkzeug==3.0.4
 openai==1.51.2
+requests==2.32.5
+beautifulsoup4==4.12.3
+lxml==5.3.0
