@@ -47,6 +47,16 @@ def create_app():
     if db_url and db_url.startswith('postgres://'):
         db_url = db_url.replace('postgres://', 'postgresql://')
     app.config["SQLALCHEMY_DATABASE_URI"] = db_url or "sqlite:///latin_vocab.db"
+
+    # Neon SSL + Pooling (fixes register/write errors)
+    app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
+        "pool_pre_ping": True,  # Detects dead Neon connections
+        "pool_recycle": 280,  # <300s Neon idle timeout
+        "pool_timeout": 30,
+        "connect_args": {
+            "sslmode": "require"  # Neon mandates SSL
+        }
+    }
     app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
     app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", "fallback-secret-key")
 

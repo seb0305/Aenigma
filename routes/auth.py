@@ -39,19 +39,21 @@ def register():
     if not data or 'username' not in data or 'password' not in data:
         return jsonify({'success': False, 'message': 'Missing username or password'}), 400
 
-    if User.query.filter_by(username=data['username']).first():
-        return jsonify({'success': False, 'message': 'Username already exists'}), 400
+    # Context push for blueprints
+    with db.app.app_context():
+        if User.query.filter_by(username=data['username']).first():
+            return jsonify({'success': False, 'message': 'Username already exists'}), 400
 
-    user = User(username=data['username'])
-    user.set_password(data['password'])
-    db.session.add(user)
-    db.session.commit()
-    login_user(user)
-    return jsonify({
-        'success': True,
-        'user_id': user.id,
-        'username': user.username
-    }), 201
+        user = User(username=data['username'])
+        user.set_password(data['password'])
+        db.session.add(user)
+        db.session.commit()
+        login_user(user)
+        return jsonify({
+            'success': True,
+            'user_id': user.id,
+            'username': user.username
+        }), 201
 
 
 @auth_bp.route('/logout', methods=['POST'])
