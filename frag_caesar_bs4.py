@@ -29,11 +29,13 @@ def get_kurzuebersicht(word: str) -> List[Dict[str, str]]:
         Empty list if no table found or insufficient rows.
     """
     url = f"https://www.frag-caesar.de/lateinwoerterbuch/{word}-uebersetzung.html"
+    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
 
     try:
-        resp = requests.get(url, timeout=10)
+        resp = requests.get(url, timeout=30, headers=headers)
         resp.raise_for_status()
-    except requests.RequestException:
+    except requests.RequestException as e:
+        print(f"Frag-Caesar fetch error for {word}: {e}")
         return []
 
     soup = BeautifulSoup(resp.text, "html.parser")

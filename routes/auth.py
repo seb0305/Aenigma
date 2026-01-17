@@ -37,23 +37,22 @@ def register():
     """Create new user account and auto-login."""
     data = request.get_json()
     if not data or 'username' not in data or 'password' not in data:
-        return jsonify({'success': False, 'message': 'Missing username or password'}), 400
+        return jsonify(success=False, message='Missing username or password'), 400
 
-    # Context push for blueprints
-    with db.app.app_context():
-        if User.query.filter_by(username=data['username']).first():
-            return jsonify({'success': False, 'message': 'Username already exists'}), 400
+    if User.query.filter_by(username=data['username']).first():
+        return jsonify(success=False, message='Username already exists'), 400
 
-        user = User(username=data['username'])
-        user.set_password(data['password'])
-        db.session.add(user)
+    user = User(username=data['username'])
+    user.set_password(data['password'])
+    db.session.add(user)
+    try:
         db.session.commit()
         login_user(user)
-        return jsonify({
-            'success': True,
-            'user_id': user.id,
-            'username': user.username
-        }), 201
+        return jsonify(success=True, userid=user.id, username=user.username), 201
+    except Exception as e:
+        db.session.rollback()
+        print(f"Register error: {e}")  # Logs to Render console
+        return jsonify(success=False, message='Database error: Network/Server issue'), 500
 
 
 @auth_bp.route('/logout', methods=['POST'])

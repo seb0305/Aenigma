@@ -48,15 +48,17 @@ def create_app():
         db_url = db_url.replace('postgres://', 'postgresql://')
     app.config["SQLALCHEMY_DATABASE_URI"] = db_url or "sqlite:///latin_vocab.db"
 
-    # Neon SSL + Pooling (fixes register/write errors)
-    app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
-        "pool_pre_ping": True,  # Detects dead Neon connections
-        "pool_recycle": 280,  # <300s Neon idle timeout
-        "pool_timeout": 30,
-        "connect_args": {
-            "sslmode": "require"  # Neon mandates SSL
+    # Neon SSL + Pooling ONLY for Postgres (fixes register/write errors locally + Render)
+    if app.config["SQLALCHEMY_DATABASE_URI"].startswith('postgresql'):
+        app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
+            "pool_pre_ping": True,  # Detects dead Neon connections
+            "pool_recycle": 280,  # <300s Neon idle timeout
+            "pool_timeout": 30,
+            "connect_args": {"sslmode": "require"}  # Neon mandates SSL
         }
-    }
+    else:
+        app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {}  # SQLite clean
+
     app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
     app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", "fallback-secret-key")
 
@@ -130,25 +132,19 @@ def api_kurzuebersicht(word):
     """Frag-Caesar Kurzübersicht → JSON (lazy import)."""
     try:
         client = get_frag_caesar()
-        raw_tsv = client.get_kurzuebersicht(word)
+        data = client.get_kurzuebersicht(word)  # Now list[dict]
+        if not data:
+            return jsonify([])  # Empty list OK
 
-        if not raw_tsv or raw_tsv.strip() == '':
-            return jsonify([])
-
-        # TSV → JSON (skip header)
-        reader = csv.DictReader(io.StringIO(raw_tsv), delimiter='\t')
-        data = [row for row in reader]
-
-        # Add 'latin' if missing
+        # Ensure 'latin' key (add if missing)
         for row in data:
-            if not row.get('Latein'):
-                row['Latein'] = word
+            if not row.get('latin'):
+                row['latin'] = word
 
         return jsonify(data)
     except Exception as e:
-        print(f"Kurzübersicht error: {e}")
-        return jsonify([])
-
+        print(f"Kurzuebersicht error: {e}")
+        return jsonify(error="Search failed. Check console."), 500
 
 if __name__ == "__main__":
     port = int(os.environ.get('PORT', 5000))

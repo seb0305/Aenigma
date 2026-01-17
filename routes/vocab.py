@@ -76,21 +76,25 @@ def add_vocab():
     # Case 1: German translation provided → save immediately
     if german:
         try:
-            word_type = frag_caesar_bs4.get_word_type(latin)
-            flexion_type = frag_caesar_bs4.get_flexion_type(latin) if word_type in ("Verb", "Nomen") else None
+            wordtype = frag_caesar_bs4.get_word_type(latin)
+            flexiontype = frag_caesar_bs4.get_flexion_type(latin)
+            if wordtype not in ['Verb', 'Nomen']:
+                wordtype = None
         except Exception:
-            word_type, flexion_type = "unknown", None
+            wordtype, flexiontype = 'unknown', None
 
         entry = VocabEntry(
-            user_id=user_id,
-            latin_word=latin,
-            german_translation=german,
-            word_type=word_type,
-            flexion_type=flexion_type
+            userid=user_id, latinword=latin, germantranslation=german,
+            wordtype=wordtype, flexiontype=flexiontype
         )
         db.session.add(entry)
-        db.session.commit()
-        return jsonify({"id": entry.id}), 201
+        try:
+            db.session.commit()
+            return jsonify(id=entry.id), 201
+        except Exception as e:
+            db.session.rollback()
+            print(f"Addvocab commit error: {e}")
+            return jsonify(error='Database error: Network/Server issue'), 500
 
     # Case 2: No German → get OpenAI translations
     client = current_app.config['client']
@@ -145,14 +149,19 @@ def update_vocab(entry_id):
     if "german_translation" in data:
         entry.german_translation = data["german_translation"].strip()
 
-    db.session.commit()
-    return jsonify({
+    try:
+        db.session.commit()
+        return jsonify({
         "id": entry.id,
         "latin_word": entry.latin_word,
         "german_translation": entry.german_translation,
         "accuracy_percent": entry.accuracy_percent,
         "has_bronze_card": entry.has_bronze_card,
-    })
+        })
+    except Exception as e:
+        db.session.rollback()
+        print(f"Updatevocab error: {e}")
+        return jsonify(error='Database update failed'), 500
 
 
 @vocab_bp.delete("/<int:entry_id>")
@@ -162,8 +171,13 @@ def delete_vocab(entry_id):
     entry = VocabEntry.query.filter_by(id=entry_id, user_id=user_id).first_or_404()
 
     db.session.delete(entry)
-    db.session.commit()
-    return jsonify({"status": "deleted"})
+    try:
+        db.session.commit()
+        return jsonify(status='deleted')
+    except Exception as e:
+        db.session.rollback()
+        print(f"Deletevocab error: {e}")
+        return jsonify(error='Database delete failed'), 500
 
 
 @vocab_bp.route("/import/<latin_word>", methods=["POST"])
@@ -187,5 +201,10 @@ def import_vocab(latin_word):
         flexion_type = flexion_type
     )
     db.session.add(entry)
-    db.session.commit()
-    return jsonify({"status": "imported", "id": entry.id}), 201
+    try:
+        db.session.commit()
+        return jsonify(status='imported', id=entry.id), 201
+    except Exception as e:
+        db.session.rollback()
+        print(f"Importvocab error: {e}")
+        return jsonify(error='Database import failed'), 500
