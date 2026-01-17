@@ -27,10 +27,13 @@ def create_app():
     from routes.auth import auth_bp
 
     app = Flask(__name__)
+    db_url = os.getenv('DATABASE_URL')
+    if db_url.startswith('postgres://'):
+        db_url = db_url.replace('postgres://', 'postgresql://')
 
     # Configuration from environment variables
     app.config["SECRET_KEY"] = os.getenv("SECRET_KEY")
-    app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///latin_vocab.db"
+    app.config["SQLALCHEMY_DATABASE_URI"] = db_url or "sqlite:///latin_vocab.db"
     app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
     # AI configuration for quizzes and features
