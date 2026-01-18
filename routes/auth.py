@@ -71,3 +71,16 @@ def me():
         'user_id': current_user.id,
         'username': current_user.username
     }), 200
+
+@auth_bp.route('/status')
+def status():
+    """Check auth status without login required."""
+    from flask_login import current_user
+    if current_user.is_authenticated:
+        return jsonify({
+            'logged_in': True,
+            'user_id': current_user.id,
+            'username': current_user.username
+        })
+    return jsonify({'logged_in': False})
+
