@@ -84,8 +84,8 @@ def add_vocab():
             wordtype, flexiontype = 'unknown', None
 
         entry = VocabEntry(
-            userid=user_id, latinword=latin, germantranslation=german,
-            wordtype=wordtype, flexiontype=flexiontype
+            user_id=user_id, latin_word=latin, german_translation=german,
+            word_type=wordtype, flexion_type=flexiontype
         )
         db.session.add(entry)
         try:
