@@ -264,6 +264,7 @@ def submit_answer():
     # Bronze card logic
     card_change = None
     card_id = None
+    default_image_url = "https://placehold.co/240x320?text=Bronze"
 
     bronze_card = db.session.query(Card, UserCard).join(UserCard).filter(
         Card.vocab_entry_id == vocab_entry.id,
@@ -274,14 +275,30 @@ def submit_answer():
     if (is_correct and vocab_entry.accuracy_percent >= 90 and
             vocab_entry.total_answers >= 1 and not bronze_card):
 
+
+        if vocab_entry.latin_word.lower() == 'nam':
+            image_url_raw = "https://i.postimg.cc/3NWP8ysw-/nam.png"
+
+        elif vocab_entry.latin_word.lower() == 'quamquam':
+            image_url_raw = "https://i.postimg.cc/x1GFSyXx/quamquam.png"
+
+        elif vocab_entry.latin_word.lower() == 'vulnus':
+            image_url_raw = "https://i.postimg.cc/jqN1XbRG/vulnus.png"
+
+
+        else:
+            image_url_raw = default_image_url
+
         # Create bronze card
         card = Card(
             vocab_entry_id=vocab_entry.id,
             rarity="bronze",
             title=vocab_entry.latin_word,
             description=f"Bronze card for {vocab_entry.latin_word}",
-            image_url="https://placehold.co/240x320?text=Bronze"
+            image_url=image_url_raw,
         )
+
+
         db.session.add(card)
         db.session.flush()
 
