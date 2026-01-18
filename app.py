@@ -131,10 +131,10 @@ def index():
 def api_kurzuebersicht(word):
     """Frag-Caesar Kurzübersicht → JSON (lazy import)."""
     try:
-        client = get_frag_caesar()
-        data = client.get_kurzuebersicht(word)  # Now list[dict]
+        import frag_caesar_bs4 as fc
+        data = fc.get_kurzuebersicht(word)  # Now list[dict]
         if not data:
-            return jsonify([])  # Empty list OK
+            return jsonify(data or []) # Empty list OK
 
         # Ensure 'latin' key (add if missing)
         for row in data:
